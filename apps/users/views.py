@@ -1,6 +1,7 @@
 """
 User auth endpoints per .cursor/docs/core/auth/update.md
 
+- Login, Signup, Logout
 - Update profile (name, lastName, born, metaData)
 - UpdatePassword
 - Update with OTP (email, phoneNumber) - stub
@@ -11,10 +12,13 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate, login, logout
+from django.views.decorators.csrf import csrf_exempt
 
 from apps.commons.response import ResponseCode, api_response
 from .serializers import (
+    LoginSerializer,
+    SignupSerializer,
     UserAuthSerializer,
     UpdateProfileSerializer,
     UpdatePasswordSerializer,
@@ -44,6 +48,53 @@ def _get_user_auth_data(user):
         "phoneNumber": profile.phone_number or "",
         "deviceId": profile.device_id or "",
     }
+
+
+@csrf_exempt
+@api_view(["POST"])
+def login_view(request):
+    """Login with username and password. Uses session auth."""
+    serializer = LoginSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
+    user = authenticate(
+        request,
+        username=serializer.validated_data["username"],
+        password=serializer.validated_data["password"],
+    )
+    if user is None:
+        return api_response("INVALID_CREDENTIALS", status=401)
+    login(request, user)
+    return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=200)
+
+
+@csrf_exempt
+@api_view(["POST"])
+def signup_view(request):
+    """Create new user account."""
+    serializer = SignupSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
+    data = serializer.validated_data
+    if User.objects.filter(username=data["username"]).exists():
+        return api_response("USERNAME_ALREADY_EXISTS", status=400)
+    user = User.objects.create_user(
+        username=data["username"],
+        password=data["password"],
+        email=data.get("email") or "",
+        first_name=data.get("fullName") or "",
+    )
+    UserProfile.objects.get_or_create(user=user)
+    login(request, user)
+    return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=201)
+
+
+@csrf_exempt
+@api_view(["POST"])
+def logout_view(request):
+    """Logout current user."""
+    logout(request)
+    return api_response(ResponseCode.SUCCESS, data=None, status=200)
 
 
 @api_view(["GET"])

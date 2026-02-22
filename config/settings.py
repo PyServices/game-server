@@ -95,8 +95,12 @@ else:
         },
     }
 
-# CORS
-CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:8000').split(',')]
+# CORS - credentials required for session auth
+CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5000,http://localhost:8000').split(',')]
+CORS_ALLOW_CREDENTIALS = True
+
+# CSRF - allow frontend origins for cross-origin POST (login, signup, logout)
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://localhost:5000,http://127.0.0.1:3000,http://127.0.0.1:5000').split(',')]
 
 # Fast Game (WebSocket game server) - for real-time multiplayer
 FAST_GAME_WS_URL = os.getenv('FAST_GAME_WS_URL', 'ws://localhost:8001')
