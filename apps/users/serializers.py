@@ -7,6 +7,27 @@ User = get_user_model()
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+    allowRegister = serializers.BooleanField(default=False, required=False)
+
+
+class LoginGuestSerializer(serializers.Serializer):
+    deviceId = serializers.CharField()
+
+
+class LoginOTPSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    type = serializers.ChoiceField(choices=["email", "phoneNumber"])
+
+
+class LoginOTPVerifySerializer(serializers.Serializer):
+    otpCode = serializers.CharField()
+    token = serializers.CharField(required=False)  # Can also come from Authorization header
+
+
+class LoginEmailPhoneSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    valueType = serializers.ChoiceField(choices=["Phone", "Email"])
+    password = serializers.CharField(write_only=True)
 
 
 class SignupSerializer(serializers.Serializer):
@@ -47,10 +68,15 @@ class UpdateProfileSerializer(serializers.Serializer):
     lastName = serializers.CharField(required=False, max_length=150)
     born = serializers.DateField(required=False, allow_null=True)
     metaData = serializers.JSONField(required=False)
+    contents = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        help_text="Contents Type: [{key, id}]",
+    )
 
 
 class UpdatePasswordSerializer(serializers.Serializer):
-    currentPassword = serializers.CharField(write_only=True)
+    currentPassword = serializers.CharField(write_only=True, required=False)
     newPassword = serializers.CharField(write_only=True)
 
 

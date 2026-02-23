@@ -1,13 +1,12 @@
 """
-User auth endpoints per .cursor/docs/core/auth/update.md
+User auth endpoints per .cursor/docs/core/auth/
 
-- Login, Signup, Logout
-- Update profile (name, lastName, born, metaData)
-- UpdatePassword
-- Update with OTP (email, phoneNumber) - stub
-- UpdateDeviceId
+- Login: guest (deviceId), username/password (+allowRegister), OTP (request + verify), email/phone + password
+- Signup, Logout
+- Update profile, UpdatePassword, Update OTP, UpdateDeviceId
 """
 import re
+import uuid
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -18,14 +17,20 @@ from django.views.decorators.csrf import csrf_exempt
 from apps.commons.response import ResponseCode, api_response
 from .serializers import (
     LoginSerializer,
+    LoginGuestSerializer,
+    LoginOTPSerializer,
+    LoginOTPVerifySerializer,
+    LoginEmailPhoneSerializer,
     SignupSerializer,
-    UserAuthSerializer,
     UpdateProfileSerializer,
     UpdatePasswordSerializer,
     UpdateOTPSerializer,
     UpdateDeviceIdSerializer,
 )
 from .models import UserProfile
+from .auth_utils import get_tokens_for_user
+from .otp_token import generate_otp_code, create_otp_token, decode_otp_token
+from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
 
@@ -39,33 +44,72 @@ def _get_user_auth_data(user):
     profile, _ = UserProfile.objects.get_or_create(user=user)
     return {
         "id": user.id,
-        "username": user.username,
+        "username": user.username or "",
         "email": user.email or "",
         "name": user.first_name or "",
         "lastName": user.last_name or "",
         "born": str(profile.born) if profile.born else None,
         "metaData": profile.meta_data,
+        "contents": profile.contents,
         "phoneNumber": profile.phone_number or "",
         "deviceId": profile.device_id or "",
+        "isGuest": profile.is_guest,
+        "role": profile.role,
     }
 
 
 @csrf_exempt
 @api_view(["POST"])
+def login_guest(request):
+    """Login(deviceId) - guest login. Creates UserAuth+UserProfile with isGuest=true if new."""
+    serializer = LoginGuestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
+    device_id = serializer.validated_data["deviceId"].strip()
+    if not device_id:
+        return api_response(ResponseCode.DEVICE_ID_NOT_FOUND, status=400)
+    profile = UserProfile.objects.filter(device_id=device_id).select_related("user").first()
+    if profile:
+        user = profile.user
+        login(request, user)
+        tokens = get_tokens_for_user(user)
+        data = {**_get_user_auth_data(user), **tokens}
+        return api_response(ResponseCode.SUCCESS, data=data, status=200)
+    username = f"guest_{uuid.uuid4().hex[:16]}"
+    user = User.objects.create_user(username=username)
+    profile = UserProfile.objects.create(user=user, device_id=device_id, is_guest=True)
+    login(request, user)
+    tokens = get_tokens_for_user(user)
+    data = {**_get_user_auth_data(user), **tokens}
+    return api_response(ResponseCode.SUCCESS, data=data, status=201)
+
+
+@csrf_exempt
+@api_view(["POST"])
 def login_view(request):
-    """Login with username and password. Uses session auth."""
+    """Login(username, password, allowRegister) - username/password with optional auto-register."""
     serializer = LoginSerializer(data=request.data)
     if not serializer.is_valid():
         return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
-    user = authenticate(
-        request,
-        username=serializer.validated_data["username"],
-        password=serializer.validated_data["password"],
-    )
+    username = serializer.validated_data["username"]
+    password = serializer.validated_data["password"]
+    allow_register = serializer.validated_data.get("allowRegister", False)
+    user = User.objects.filter(username=username).first()
     if user is None:
-        return api_response("INVALID_CREDENTIALS", status=401)
+        if not allow_register:
+            return api_response(ResponseCode.USER_NOT_FOUND, status=404)
+        user = User.objects.create_user(username=username, password=password)
+        UserProfile.objects.get_or_create(user=user)
+        login(request, user)
+        tokens = get_tokens_for_user(user)
+        data = {**_get_user_auth_data(user), **tokens}
+        return api_response(ResponseCode.SUCCESS, data=data, status=201)
+    if not user.check_password(password):
+        return api_response(ResponseCode.PASSWORD_IS_WRONG, status=401)
     login(request, user)
-    return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=200)
+    tokens = get_tokens_for_user(user)
+    data = {**_get_user_auth_data(user), **tokens}
+    return api_response(ResponseCode.SUCCESS, data=data, status=200)
 
 
 @csrf_exempt
@@ -86,7 +130,126 @@ def signup_view(request):
     )
     UserProfile.objects.get_or_create(user=user)
     login(request, user)
-    return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=201)
+    tokens = get_tokens_for_user(user)
+    data_resp = {**_get_user_auth_data(user), **tokens}
+    return api_response(ResponseCode.SUCCESS, data=data_resp, status=201)
+
+
+@csrf_exempt
+@api_view(["POST"])
+def login_otp(request):
+    """Login(value, type) - request OTP. Validates value, sends OTP (stub), returns JWT token."""
+    serializer = LoginOTPSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
+    value = serializer.validated_data["value"].strip()
+    otp_type = serializer.validated_data["type"]
+    if otp_type == "phoneNumber" and not PHONE_REGEX.match(value):
+        return api_response(ResponseCode.PHONE_NUMBER_IS_NOT_VALID, status=400)
+    if otp_type == "email" and not EMAIL_REGEX.match(value):
+        return api_response(ResponseCode.EMAIL_IS_NOT_VALID, status=400)
+    user = None
+    if otp_type == "phoneNumber":
+        profile = UserProfile.objects.filter(phone_number=value).select_related("user").first()
+        user = profile.user if profile else None
+    else:
+        user = User.objects.filter(email=value).first()
+    user_id = user.id if user else None
+    otp_code = generate_otp_code()
+    token = create_otp_token(user_id=user_id, value=value, otp_type=otp_type, otp_code=otp_code)
+    # Stub: send OTP via SMS/Email - in production integrate with SMS/Email provider
+    return api_response(ResponseCode.SUCCESS, data={"token": token}, status=201)
+
+
+@csrf_exempt
+@api_view(["POST"])
+def login_otp_verify(request):
+    """Verify(otpCode) - token required. Login or register on success."""
+    serializer = LoginOTPVerifySerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
+    otp_code = serializer.validated_data["otpCode"]
+    token = serializer.validated_data.get("token") or (
+        request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    )
+    if not token:
+        return api_response("VALIDATION_ERROR", meta={"token": "Required"}, status=400)
+    payload = decode_otp_token(token)
+    if not payload or payload.get("otpCode") != otp_code:
+        return api_response("VALIDATION_ERROR", meta={"otpCode": "Invalid or expired"}, status=400)
+    user_id = payload.get("userAuthId")
+    value = payload.get("value")
+    otp_type = payload.get("type")
+    user = User.objects.get(pk=user_id) if user_id else None
+    if user is None:
+        username = f"user_{uuid.uuid4().hex[:12]}"
+        user = User.objects.create_user(username=username)
+        profile = UserProfile.objects.create(user=user, is_guest=False)
+        if otp_type == "email":
+            user.email = value
+        else:
+            profile.phone_number = value
+        user.save()
+        profile.save()
+    else:
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        if otp_type == "email" and user.email != value:
+            user.email = value
+            user.save()
+        elif otp_type == "phoneNumber" and profile.phone_number != value:
+            profile.phone_number = value
+            profile.save()
+    login(request, user)
+    tokens = get_tokens_for_user(user)
+    data = {**_get_user_auth_data(user), **tokens}
+    return api_response(ResponseCode.SUCCESS, data=data, status=200)
+
+
+@csrf_exempt
+@api_view(["POST"])
+def login_email_phone(request):
+    """Login(value, valueType, password) - login with email or phone + password."""
+    serializer = LoginEmailPhoneSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
+    value = serializer.validated_data["value"].strip()
+    value_type = serializer.validated_data["valueType"]
+    password = serializer.validated_data["password"]
+    user = None
+    if value_type == "Email":
+        user = User.objects.filter(email=value).first()
+    else:
+        profile = UserProfile.objects.filter(phone_number=value).select_related("user").first()
+        user = profile.user if profile else None
+    if user is None:
+        return api_response(ResponseCode.USER_NOT_FOUND, status=404)
+    if not user.check_password(password):
+        return api_response(ResponseCode.PASSWORD_IS_WRONG, status=401)
+    login(request, user)
+    tokens = get_tokens_for_user(user)
+    data = {**_get_user_auth_data(user), **tokens}
+    return api_response(ResponseCode.SUCCESS, data=data, status=200)
+
+
+@csrf_exempt
+@api_view(["POST"])
+def token_refresh(request):
+    """Refresh JWT. Accepts refreshToken or refresh in body. Returns {token, refreshToken}."""
+    refresh_str = (
+        request.data.get("refreshToken")
+        or request.data.get("refresh")
+    )
+    if not refresh_str:
+        return api_response("VALIDATION_ERROR", meta={"refreshToken": "Required"}, status=400)
+    try:
+        refresh = RefreshToken(refresh_str)
+        tokens = {
+            "token": str(refresh.access_token),
+            "refreshToken": str(refresh),
+        }
+        return api_response(ResponseCode.SUCCESS, data=tokens, status=200)
+    except Exception:
+        return api_response("VALIDATION_ERROR", meta={"refreshToken": "Invalid or expired"}, status=400)
 
 
 @csrf_exempt
@@ -124,6 +287,8 @@ def update_profile(request):
         profile.born = data["born"]
     if "metaData" in data:
         profile.meta_data = data["metaData"]
+    if "contents" in data:
+        profile.contents = data["contents"]
     profile.save()
     return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=200)
 
@@ -131,17 +296,19 @@ def update_profile(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_password(request):
-    """UpdatePassword(userAuthID, currentPassword, NewPassword)."""
+    """UpdatePassword - set or change password. No currentPassword needed for guests (no password)."""
     serializer = UpdatePasswordSerializer(data=request.data)
     if not serializer.is_valid():
         return api_response("VALIDATION_ERROR", meta=serializer.errors, status=400)
     user = request.user
-    if not user.check_password(serializer.validated_data["currentPassword"]):
-        return api_response(
-            ResponseCode.CURRENT_PASSWORD_IS_WRONG,
-            status=401,
-        )
-    user.set_password(serializer.validated_data["newPassword"])
+    new_password = serializer.validated_data["newPassword"]
+    current_password = serializer.validated_data.get("currentPassword")
+    if user.has_usable_password():
+        if not current_password:
+            return api_response("VALIDATION_ERROR", meta={"currentPassword": "Required"}, status=400)
+        if not user.check_password(current_password):
+            return api_response(ResponseCode.CURRENT_PASSWORD_IS_WRONG, status=401)
+    user.set_password(new_password)
     user.save()
     return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=200)
 
@@ -173,11 +340,9 @@ def update_otp(request):
         if user.email == value:
             return api_response(ResponseCode.EMAIL_IS_SAME, status=400)
 
-    # Stub: return token. In production: send OTP (SMS/Email), create JWT with {value, type, otpCode, expire}
-    import hashlib
-    import time
-    raw = f"{user.id}:{value}:{otp_type}:{time.time()}"
-    token = hashlib.sha256(raw.encode()).hexdigest()
+    otp_code = generate_otp_code()
+    token = create_otp_token(user_id=user.id, value=value, otp_type=otp_type, otp_code=otp_code)
+    # Stub: send OTP via SMS/Email - in production integrate with SMS/Email provider
     return api_response(ResponseCode.SUCCESS, data={"token": token}, status=201)
 
 
@@ -194,9 +359,6 @@ def update_device_id(request):
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
     profile.device_id = str(device_id).strip()
     profile.save()
-    # Optional: return token, refreshToken - for now return UserAuth
-    return api_response(
-        ResponseCode.SUCCESS,
-        data=_get_user_auth_data(request.user),
-        status=200,
-    )
+    tokens = get_tokens_for_user(request.user)
+    data = {**_get_user_auth_data(request.user), **tokens}
+    return api_response(ResponseCode.SUCCESS, data=data, status=200)

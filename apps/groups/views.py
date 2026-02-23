@@ -4,11 +4,13 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .services import TagService, CategoryService
 from .serializers import TagSerializer, CategorySerializer
+from .filters import TagFilter, CategoryFilter
 from apps.commons.mixins import StandardResponseMixin
 
 
 class TagViewSet(StandardResponseMixin, viewsets.ModelViewSet):
     serializer_class = TagSerializer
+    filterset_class = TagFilter
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ["name", "description", "label"]
     ordering_fields = ["created_at", "updated_at"]
@@ -20,6 +22,7 @@ class TagViewSet(StandardResponseMixin, viewsets.ModelViewSet):
 
 class CategoryViewSet(StandardResponseMixin, viewsets.ModelViewSet):
     serializer_class = CategorySerializer
+    filterset_class = CategoryFilter
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ["name", "description", "label"]
     ordering_fields = ["created_at", "updated_at"]

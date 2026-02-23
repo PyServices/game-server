@@ -10,12 +10,20 @@ class BaseIntegerInFilter(django_filters.BaseInFilter, django_filters.NumberFilt
 class ResourceFilter(django_filters.FilterSet):
     ownerResourceId = django_filters.NumberFilter(field_name="owner_resource_id")
     resourceType = django_filters.CharFilter(field_name="type")
+    resourceTag = django_filters.CharFilter(method="filter_resource_tag")
     searchInput = django_filters.CharFilter(method="filter_search")
     tagsId = BaseIntegerInFilter(field_name="tags__id", lookup_expr="in")
+    categoryIds = BaseIntegerInFilter(field_name="category_id", lookup_expr="in")
 
     class Meta:
         model = Resource
         fields = ["owner_resource_id", "type"]
+
+    def filter_resource_tag(self, queryset, name, value):
+        """Asset config: filter by config.resource_tag."""
+        if not value:
+            return queryset
+        return queryset.filter(config__resource_tag=value)
 
     def filter_search(self, queryset, name, value):
         if not value:

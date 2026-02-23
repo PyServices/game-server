@@ -9,6 +9,7 @@ Types: Currency, Meta, Asset, Data, Other
 - data: JSON, only for type=Data, shown when user obtains resource
 """
 from django.db import models
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 
@@ -87,3 +88,46 @@ class Resource(models.Model):
         if self.type == ResourceType.CURRENCY:
             self.is_consumable = True
         super().save(*args, **kwargs)
+
+
+class UserResource(models.Model):
+    """User's resource instance. value is JSON per type: Currency/Meta {value}, Asset {childs}, Data {value, valueType}."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="user_resources",
+    )
+    resource = models.ForeignKey(
+        Resource,
+        on_delete=models.CASCADE,
+        related_name="user_resources",
+    )
+    owner_user_resource = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="child_resources",
+    )
+    value = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "resource"],
+                condition=models.Q(owner_user_resource__isnull=True),
+                name="unique_user_resource_top",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "resource", "owner_user_resource"],
+                condition=models.Q(owner_user_resource__isnull=False),
+                name="unique_user_resource_child",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id}:{self.resource.name}"

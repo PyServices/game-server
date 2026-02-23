@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 import re
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -59,6 +60,8 @@ INSTALLED_APPS = [
     'apps.resources',
     'apps.languages',
     'apps.games',
+    'apps.events',
+    'apps.content',
     'apps.about',
 ]
 
@@ -147,10 +150,20 @@ else:
 # Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'DEFAULT_PAGINATION_CLASS': 'apps.commons.pagination.StandardPagination',
     'PAGINATE_BY_PARAM': 'limitItem',
     'EXCEPTION_HANDLER': 'apps.commons.exceptions.standard_exception_handler',
+}
+
+# Simple JWT - token lifetime
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
 # drf-spectacular (OpenAPI/Swagger)

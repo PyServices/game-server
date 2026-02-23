@@ -1,5 +1,6 @@
 """Credits API - REST only. Uses CreditService (no direct model access)."""
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
@@ -18,3 +19,10 @@ class CreditViewSet(StandardResponseMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         return CreditService.list_credits()
+
+    @action(detail=False, url_path="by-slug/(?P<slug>[^/.]+)", methods=["get"])
+    def by_slug(self, request, slug=None):
+        """Retrieve a credit by slug."""
+        credit = CreditService.get_credit_by_slug(slug)
+        serializer = self.get_serializer(credit)
+        return self._success(serializer.data)
