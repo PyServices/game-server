@@ -268,6 +268,18 @@ def me(request):
     return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(request.user), status=200)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def search_users(request):
+    """Search users by username. GET ?q=username (min 2 chars)."""
+    q = (request.GET.get("q") or "").strip()
+    if len(q) < 2:
+        return api_response(ResponseCode.SUCCESS, data=[], status=200)
+    users = User.objects.filter(username__icontains=q).exclude(pk=request.user.id)[:20]
+    data = [{"id": u.id, "username": u.username or ""} for u in users]
+    return api_response(ResponseCode.SUCCESS, data=data, status=200)
+
+
 @api_view(["PATCH", "PUT"])
 @permission_classes([IsAuthenticated])
 def update_profile(request):

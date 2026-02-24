@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'apps.resources',
     'apps.languages',
     'apps.games',
+    'apps.social',
     'apps.events',
     'apps.content',
     'apps.about',

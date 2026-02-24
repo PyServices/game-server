@@ -66,7 +66,7 @@ class Scene(models.Model):
 
 
 class Match(models.Model):
-    """Active or finished match. Created by matchmaking."""
+    """Active or finished match (lobby). Created by matchmaking."""
 
     class Status(models.TextChoices):
         WAITING = "waiting"
@@ -74,10 +74,19 @@ class Match(models.Model):
         FINISHED = "finished"
 
     game_slug = models.CharField(max_length=64)
+    scene_slug = models.CharField(max_length=64, blank=True)  # For realtime; turn uses match id
+    mode = models.CharField(
+        max_length=20,
+        choices=Mode.choices,
+        default=Mode.REAL_TIME,
+    )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.WAITING
     )
-    channel_name = models.CharField(max_length=128, unique=True)  # Channel group name
+    channel_name = models.CharField(max_length=128, unique=True)  # Room id for fast-game
+    host_user_id = models.IntegerField(null=True, blank=True)  # FK to User
+    max_players = models.IntegerField(default=4)
+    metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
 
@@ -86,6 +95,28 @@ class Match(models.Model):
 
     def __str__(self):
         return f"{self.game_slug} ({self.channel_name})"
+
+
+class MatchInvite(models.Model):
+    """Invite a friend to a lobby."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending"
+        ACCEPTED = "accepted"
+        DECLINED = "declined"
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="invites")
+    invitee_id = models.IntegerField()
+    inviter_id = models.IntegerField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [["match", "invitee_id"]]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Match {self.match_id} invite {self.invitee_id}"
 
 
 class MatchPlayer(models.Model):
