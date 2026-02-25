@@ -3,8 +3,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from drf_spectacular.utils import extend_schema
 
-from .models import UserResource
 from .services import ResourceService, UserResourceService
 from .serializers import (
     ResourceSerializer,
@@ -31,15 +31,17 @@ class ResourceViewSet(StandardResponseMixin, viewsets.ModelViewSet):
         return ResourceService.list_all()
 
 
+@extend_schema(responses={200: UserResourceSerializer(many=True)})
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def list_user_resources(request):
     """List current user's resources."""
-    qs = UserResource.objects.filter(user=request.user).select_related("resource")
+    qs = UserResourceService.list_for_user(request.user.id)
     serializer = UserResourceSerializer(qs, many=True)
     return api_response("SUCCESS", data=serializer.data)
 
 
+@extend_schema(request=UserResourceAddSerializer, responses={200: None})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def user_resource_add(request):
@@ -57,6 +59,7 @@ def user_resource_add(request):
     return api_response(result["code"], data=result.get("data"), meta=result.get("meta"), status=status)
 
 
+@extend_schema(request=UserResourceSetSerializer, responses={200: None})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def user_resource_set(request):
@@ -71,6 +74,7 @@ def user_resource_set(request):
     return api_response(result["code"], data=result.get("data"), meta=result.get("meta"), status=200)
 
 
+@extend_schema(request=UserResourceUseSerializer, responses={200: None})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def user_resource_use(request):
@@ -88,6 +92,7 @@ def user_resource_use(request):
     return api_response(result["code"], data=result.get("data"), meta=result.get("meta"), status=status)
 
 
+@extend_schema(request=UserResourceGiveSerializer, responses={200: None})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def user_resource_give(request):

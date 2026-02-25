@@ -1,4 +1,8 @@
+from typing import Optional
+
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+
 from apps.social.models import ChatRoom, ChatMessage, ChatRoomMember
 from apps.users.services import UserService
 
@@ -11,7 +15,8 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         fields = ["id", "room_id", "user_id", "username", "content", "metadata", "created_at"]
         read_only_fields = fields
 
-    def get_username(self, obj):
+    @extend_schema_field(serializers.CharField())
+    def get_username(self, obj: ChatMessage) -> str:
         user = UserService.get_user(obj.user_id)
         return user.username if user else f"user_{obj.user_id}"
 
@@ -43,13 +48,15 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def get_last_message(self, obj):
+    @extend_schema_field(serializers.DictField(allow_null=True))
+    def get_last_message(self, obj: ChatRoom) -> Optional[dict]:
         msg = obj.messages.order_by("-created_at").first()
         if msg:
             return ChatMessageSerializer(msg).data
         return None
 
-    def get_unread_count(self, obj):
+    @extend_schema_field(serializers.IntegerField())
+    def get_unread_count(self, obj: ChatRoom) -> int:
         request = self.context.get("request")
         if not request:
             return 0

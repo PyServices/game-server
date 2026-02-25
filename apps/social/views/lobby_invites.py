@@ -1,11 +1,13 @@
 """Lobby invites - list and accept."""
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 
 from apps.games.services import MatchService
 from apps.commons.response import api_response
 
 
+@extend_schema(responses={200: None})
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def list_lobby_invites(request):

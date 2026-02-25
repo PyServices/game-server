@@ -87,3 +87,8 @@ class UpdateOTPSerializer(serializers.Serializer):
 
 class UpdateDeviceIdSerializer(serializers.Serializer):
     deviceId = serializers.CharField()
+
+
+class TokenRefreshSerializer(serializers.Serializer):
+    refreshToken = serializers.CharField(required=False)
+    refresh = serializers.CharField(required=False)

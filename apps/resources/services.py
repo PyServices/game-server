@@ -17,9 +17,21 @@ def _emit_resource_event(event_name: str, user_id: int, resource_id: int, value=
 
 
 class ResourceService:
+    """Public API for resource entity access. Other modules use this, not models."""
+
     @staticmethod
     def get_by_id(pk: int) -> Resource:
         return get_object_or_404(Resource, pk=pk)
+
+    @staticmethod
+    def grant_prize_if_eligible(resource_id: int, user_id: int) -> None:
+        """If resource is ASSET or DATA, grant it to the user. No-op otherwise. Used by events."""
+        try:
+            resource = Resource.objects.filter(pk=resource_id).first()
+            if resource and resource.type in (ResourceType.ASSET, ResourceType.DATA):
+                UserResourceService.give(user_id, resource_id)
+        except Exception:
+            pass
 
     @staticmethod
     def list_all():
@@ -43,6 +55,25 @@ class ResourceService:
 
 class UserResourceService:
     """Add, Set, Use, Give per resource type. Per .cursor/docs/core/resource/user-resource.md"""
+
+    @staticmethod
+    def list_for_user(user_id: int):
+        """List user's resources (queryset). For use by resources views only."""
+        return UserResource.objects.filter(user_id=user_id).select_related("resource")
+
+    @staticmethod
+    def grant_earnable_on_registration(user_id: int) -> None:
+        """On user creation: grant Currency/Meta with default_amount, Data with isEarnable. Used by users app."""
+        try:
+            for r in Resource.objects.filter(
+                type__in=(ResourceType.CURRENCY, ResourceType.META)
+            ):
+                UserResourceService._get_or_create(user_id, r.id)
+            for r in Resource.objects.filter(type=ResourceType.DATA):
+                if (r.config or {}).get("isEarnable"):
+                    UserResourceService.give(user_id, r.id)
+        except Exception:
+            pass
 
     @staticmethod
     def _get_or_create(user_id: int, resource_id: int, owner_ur_id=None) -> tuple[UserResource, bool]:

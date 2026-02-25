@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from drf_spectacular.utils import extend_schema
 
 from .models import Event, UserEvent
 from .services import EventService, EventCalculate
@@ -26,6 +27,7 @@ class EventViewSet(StandardResponseMixin, viewsets.ModelViewSet):
         return Event.objects.all().prefetch_related("tags")
 
 
+@extend_schema(request=SendEventSerializer, responses={201: UserEventSerializer})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def send_event(request):
@@ -52,6 +54,7 @@ def send_event(request):
     )
 
 
+@extend_schema(responses={200: UserEventSerializer})
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_latest_event(request):
@@ -81,6 +84,7 @@ def get_latest_event(request):
     )
 
 
+@extend_schema(responses={200: None})
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_user_events(request):

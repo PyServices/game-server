@@ -1,4 +1,4 @@
-# Initial migration - Game, Scene, Match, MatchPlayer
+# Consolidated initial migration - Game, Scene, Match, MatchPlayer, MatchInvite
 
 import django.db.models.deletion
 from django.db import migrations, models
@@ -32,7 +32,18 @@ class Migration(migrations.Migration):
                 ("description", models.TextField(blank=True)),
                 ("slug", models.CharField(max_length=64)),
                 ("image", models.ImageField(blank=True, null=True, upload_to="3d/scenes/images/")),
-                ("mode", models.CharField(choices=[("offline", "Offline"), ("real-time", "Real Time"), ("turn-based", "Turn Based")], default="offline", max_length=20)),
+                (
+                    "mode",
+                    models.CharField(
+                        choices=[
+                            ("offline", "Offline"),
+                            ("real-time", "Real Time"),
+                            ("turn-based", "Turn Based"),
+                        ],
+                        default="offline",
+                        max_length=20,
+                    ),
+                ),
                 ("infinite", models.BooleanField(default=False)),
                 ("min_players", models.IntegerField(blank=True, default=1, null=True)),
                 ("max_players", models.IntegerField(blank=True, default=4, null=True)),
@@ -43,7 +54,15 @@ class Migration(migrations.Migration):
                 ("metadata", models.JSONField(blank=True, default=dict)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
-                ("game", models.ForeignKey(default=None, on_delete=django.db.models.deletion.CASCADE, related_name="scenes", to="games.game")),
+                (
+                    "game",
+                    models.ForeignKey(
+                        default=None,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="scenes",
+                        to="games.game",
+                    ),
+                ),
             ],
             options={"ordering": ["-created_at"]},
         ),
@@ -56,8 +75,35 @@ class Migration(migrations.Migration):
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("game_slug", models.CharField(max_length=64)),
-                ("status", models.CharField(choices=[("waiting", "Waiting"), ("in_progress", "In Progress"), ("finished", "Finished")], default="waiting", max_length=20)),
+                ("scene_slug", models.CharField(blank=True, max_length=64)),
+                (
+                    "mode",
+                    models.CharField(
+                        choices=[
+                            ("offline", "Offline"),
+                            ("real-time", "Real Time"),
+                            ("turn-based", "Turn Based"),
+                        ],
+                        default="real-time",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("waiting", "Waiting"),
+                            ("in_progress", "In Progress"),
+                            ("finished", "Finished"),
+                        ],
+                        default="waiting",
+                        max_length=20,
+                    ),
+                ),
                 ("channel_name", models.CharField(max_length=128, unique=True)),
+                ("host_user_id", models.IntegerField(blank=True, null=True)),
+                ("max_players", models.IntegerField(default=4)),
+                ("metadata", models.JSONField(blank=True, default=dict)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("finished_at", models.DateTimeField(blank=True, null=True)),
             ],
@@ -68,13 +114,60 @@ class Migration(migrations.Migration):
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("user_id", models.IntegerField(blank=True, null=True)),
-                ("role", models.CharField(choices=[("player", "Player"), ("spectator", "Spectator")], default="player", max_length=20)),
+                (
+                    "role",
+                    models.CharField(
+                        choices=[("player", "Player"), ("spectator", "Spectator")],
+                        default="player",
+                        max_length=20,
+                    ),
+                ),
                 ("session_id", models.CharField(max_length=64)),
                 ("name", models.CharField(default="", max_length=64)),
                 ("score", models.IntegerField(default=0)),
                 ("joined_at", models.DateTimeField(auto_now_add=True)),
-                ("match", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="players", to="games.match")),
+                (
+                    "match",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="players",
+                        to="games.match",
+                    ),
+                ),
             ],
             options={"unique_together": {("match", "session_id")}},
+        ),
+        migrations.CreateModel(
+            name="MatchInvite",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("invitee_id", models.IntegerField()),
+                ("inviter_id", models.IntegerField()),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("accepted", "Accepted"),
+                            ("declined", "Declined"),
+                        ],
+                        default="pending",
+                        max_length=20,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "match",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="invites",
+                        to="games.match",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["-created_at"],
+                "unique_together": {("match", "invitee_id")},
+            },
         ),
     ]

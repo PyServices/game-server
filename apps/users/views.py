@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model, authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.utils import extend_schema
 
 from apps.commons.response import ResponseCode, api_response
 from .serializers import (
@@ -26,6 +27,7 @@ from .serializers import (
     UpdatePasswordSerializer,
     UpdateOTPSerializer,
     UpdateDeviceIdSerializer,
+    TokenRefreshSerializer,
 )
 from .models import UserProfile
 from .auth_utils import get_tokens_for_user
@@ -58,6 +60,7 @@ def _get_user_auth_data(user):
     }
 
 
+@extend_schema(request=LoginGuestSerializer, responses={200: None, 201: None})
 @csrf_exempt
 @api_view(["POST"])
 def login_guest(request):
@@ -84,6 +87,7 @@ def login_guest(request):
     return api_response(ResponseCode.SUCCESS, data=data, status=201)
 
 
+@extend_schema(request=LoginSerializer, responses={200: None, 201: None})
 @csrf_exempt
 @api_view(["POST"])
 def login_view(request):
@@ -112,6 +116,7 @@ def login_view(request):
     return api_response(ResponseCode.SUCCESS, data=data, status=200)
 
 
+@extend_schema(request=SignupSerializer, responses={201: None})
 @csrf_exempt
 @api_view(["POST"])
 def signup_view(request):
@@ -135,6 +140,7 @@ def signup_view(request):
     return api_response(ResponseCode.SUCCESS, data=data_resp, status=201)
 
 
+@extend_schema(request=LoginOTPSerializer, responses={201: None})
 @csrf_exempt
 @api_view(["POST"])
 def login_otp(request):
@@ -161,6 +167,7 @@ def login_otp(request):
     return api_response(ResponseCode.SUCCESS, data={"token": token}, status=201)
 
 
+@extend_schema(request=LoginOTPVerifySerializer, responses={200: None})
 @csrf_exempt
 @api_view(["POST"])
 def login_otp_verify(request):
@@ -205,6 +212,7 @@ def login_otp_verify(request):
     return api_response(ResponseCode.SUCCESS, data=data, status=200)
 
 
+@extend_schema(request=LoginEmailPhoneSerializer, responses={200: None})
 @csrf_exempt
 @api_view(["POST"])
 def login_email_phone(request):
@@ -231,6 +239,7 @@ def login_email_phone(request):
     return api_response(ResponseCode.SUCCESS, data=data, status=200)
 
 
+@extend_schema(request=TokenRefreshSerializer, responses={200: None})
 @csrf_exempt
 @api_view(["POST"])
 def token_refresh(request):
@@ -252,6 +261,7 @@ def token_refresh(request):
         return api_response("VALIDATION_ERROR", meta={"refreshToken": "Invalid or expired"}, status=400)
 
 
+@extend_schema(request=None, responses={200: None})
 @csrf_exempt
 @api_view(["POST"])
 def logout_view(request):
@@ -260,6 +270,7 @@ def logout_view(request):
     return api_response(ResponseCode.SUCCESS, data=None, status=200)
 
 
+@extend_schema(responses={200: None})
 @api_view(["GET"])
 def me(request):
     """Current user profile."""
@@ -268,6 +279,7 @@ def me(request):
     return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(request.user), status=200)
 
 
+@extend_schema(responses={200: None})
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def search_users(request):
@@ -280,6 +292,7 @@ def search_users(request):
     return api_response(ResponseCode.SUCCESS, data=data, status=200)
 
 
+@extend_schema(request=UpdateProfileSerializer, responses={200: None})
 @api_view(["PATCH", "PUT"])
 @permission_classes([IsAuthenticated])
 def update_profile(request):
@@ -305,6 +318,7 @@ def update_profile(request):
     return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=200)
 
 
+@extend_schema(request=UpdatePasswordSerializer, responses={200: None})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_password(request):
@@ -325,6 +339,7 @@ def update_password(request):
     return api_response(ResponseCode.SUCCESS, data=_get_user_auth_data(user), status=200)
 
 
+@extend_schema(request=UpdateOTPSerializer, responses={201: None})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_otp(request):
@@ -358,6 +373,7 @@ def update_otp(request):
     return api_response(ResponseCode.SUCCESS, data={"token": token}, status=201)
 
 
+@extend_schema(request=UpdateDeviceIdSerializer, responses={200: None})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_device_id(request):

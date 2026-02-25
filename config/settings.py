@@ -172,6 +172,10 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'Django Back API',
     'DESCRIPTION': 'Django Back - Admin + CRUD + Metadata REST API',
     'VERSION': '1.0.0',
+    # Resolve enum naming collision for fields named "type" across components
+    'ENUM_NAME_OVERRIDES': {
+        'Type18dEnum': 'EventAggregationTypeEnum',
+    },
 }
 
 TEMPLATES = [

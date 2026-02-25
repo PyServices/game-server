@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+
 from .models import Game, Scene, Match, MatchPlayer, MatchInvite
 
 
@@ -31,6 +33,7 @@ class MatchInviteSerializer(serializers.ModelSerializer):
         fields = ["id", "invitee_id", "invitee_username", "inviter_id", "status", "created_at"]
         read_only_fields = fields
 
+    @extend_schema_field(serializers.CharField())
     def get_invitee_username(self, obj):
         from apps.users.services import UserService
         u = UserService.get_user(obj.invitee_id)

@@ -82,11 +82,8 @@ class EventService:
         cls._notify_observers(ev.id, user_event)
         if ev.prize_id:
             try:
-                from apps.resources.models import Resource, ResourceType
-                from apps.resources.services import UserResourceService
-                r = Resource.objects.filter(pk=ev.prize_id).first()
-                if r and r.type in (ResourceType.ASSET, ResourceType.DATA):
-                    UserResourceService.give(user_id, ev.prize_id)
+                from apps.resources.services import ResourceService
+                ResourceService.grant_prize_if_eligible(ev.prize_id, user_id)
             except Exception:
                 pass
         return user_event
